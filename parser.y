@@ -27,20 +27,17 @@
         int line_no;
 	} symbol_table[40];
 
-	int error_already_found=0;
     int count=0;
     int q;
 	char type[10];
     extern int countn;
 	struct node *head;
 	int sem_errors=0;
-	int synerrs=0;
 	int ic_idx=0;
 	int temp_var=0;
 	int label=0;
 	int is_for=0;
 	char buff[100];
-	char syntax_errors[10][100];
 	char errors[10][100];
 	char reserved[10][10] = {"int", "float", "char", "void", "if", "else", "for", "main", "return", "include"};
 	char icg[50][100];
@@ -72,8 +69,8 @@
 		} nd_obj3;
 	} 
 %token VOID 
-%token <nd_obj> CHARACTER PRINTFF SCANFF INT FLOAT CHAR FOR IF ELSE TRUE FALSE NUMBER FLOAT_NUM ID LE GE EQ NE GT LT AND OR STR ADD MULTIPLY DIVIDE SUBTRACT UNARY INCLUDE RETURN ERROR1
-%type <nd_obj> headers main body return datatype statement arithmetic relop program else for_loop
+%token <nd_obj> CHARACTER PRINTFF SCANFF INT FLOAT CHAR FOR IF ELSE TRUE FALSE NUMBER FLOAT_NUM ID LE GE EQ NE GT LT AND OR STR ADD MULTIPLY DIVIDE SUBTRACT UNARY INCLUDE RETURN 
+%type <nd_obj> headers main body return datatype statement arithmetic relop program else
 %type <nd_obj2> init value expression
 %type <nd_obj3> condition
 
@@ -84,20 +81,17 @@ program: headers main '(' ')' '{' body return '}' { $2.nd = mknode($6.nd, $7.nd,
 } 
 ;
 
-headers: headers headers { $$.nd = mknode($1.nd, $2.nd, "headers");}
+headers: headers headers { $$.nd = mknode($1.nd, $2.nd, "headers"); }
 | INCLUDE { add('H'); } { $$.nd = mknode(NULL, NULL, $1.name); }
-| ERROR1 { error_already_found=1; sprintf(syntax_errors[synerrs], "Syntax error in line %d , error in including header files \n", countn+1); synerrs++; } 
 ;
 
 main: datatype ID { add('F'); }
-| ERROR1 { error_already_found=1; sprintf(syntax_errors[synerrs], "Syntax error in line %d , error in calling main method \n", countn+1); synerrs++; } 
 ;
 
 datatype: INT { insert_type(); }
 | FLOAT { insert_type(); }
 | CHAR { insert_type(); }
 | VOID { insert_type(); }
-| ERROR1 { error_already_found=1; sprintf(syntax_errors[synerrs], "Syntax error in line %d , error in including header files \n", countn+1); synerrs++; } 
 ;
 
 body: FOR { add('K'); is_for = 1; } '(' statement ';' condition ';' statement ')' '{' body '}' { 
@@ -117,18 +111,7 @@ body: FOR { add('K'); is_for = 1; } '(' statement ';' condition ';' statement ')
 | body body { $$.nd = mknode($1.nd, $2.nd, "statements"); }
 | PRINTFF { add('K'); } '(' STR ')' ';' { $$.nd = mknode(NULL, NULL, "printf"); }
 | SCANFF { add('K'); } '(' STR ',' '&' ID ')' ';' { $$.nd = mknode(NULL, NULL, "scanf"); }
-| ERROR1 { error_already_found=1; sprintf(syntax_errors[synerrs], "Syntax error in line %d , error in body \n", countn+1); synerrs++; } 
 ;
-
-for_loop: FOR { add('K'); is_for = 1; } '(' statement ';' condition ';' statement ')' '{' body '}' { 
-	struct node *temp = mknode($6.nd, $8.nd, "CONDITION"); 
-	struct node *temp2 = mknode($4.nd, temp, "CONDITION"); 
-	$$.nd = mknode(temp2, $11.nd, $1.name); 
-	sprintf(icg[ic_idx++], buff);
-	sprintf(icg[ic_idx++], "JUMP to %s\n", $6.if_body);
-	sprintf(icg[ic_idx++], "\nLABEL %s:\n", $6.else_body);
-}
-| ERROR1 { error_already_found=1; sprintf(syntax_errors[synerrs], "Syntax error in line %d , error in for statement \n", countn+1); synerrs++; } 
 
 else: ELSE { add('K'); } '{' body '}' { $$.nd = mknode(NULL, $4.nd, $1.name); }
 | { $$.nd = NULL; }
@@ -188,8 +171,7 @@ statement: datatype ID { add('V'); } init {
 }
 | ID { check_declaration($1.name); } '=' expression {
 	$1.nd = mknode(NULL, NULL, $1.name); 
-	char * id_type = get_type($1.name); 
-
+	char *id_type = get_type($1.name); 
 	if(strcmp(id_type, $4.type)) {
 		if(!strcmp(id_type, "int")) {
 			if(!strcmp($4.type, "float")){
@@ -225,7 +207,6 @@ statement: datatype ID { add('V'); } init {
 		}
 	}
 	else {
-		printf("s\n");
 		$$.nd = mknode($1.nd, $4.nd, "="); 
 	}
 	sprintf(icg[ic_idx++], "%s = %s\n", $1.name, $4.name);
@@ -347,16 +328,7 @@ int main() {
 	}
 	printf("\n\n");
 	printf("\t\t\t\t\t\t\t\t PHASE 2: SYNTAX ANALYSIS \n\n");
-	if(synerrs>0) {
-		printf("Syntax errors found during syntax analysis");
-		for(int i=0; i<synerrs; i++){
-			printf("\t - %s", syntax_errors[i]);
-		}
-	} else {
-		printf("syntax analysis completed with no errors");
-		printf("\n\n");	
-		print_tree(head);
-	}
+	print_tree(head); 
 	printf("\n\n\n\n");
 	printf("\t\t\t\t\t\t\t\t PHASE 3: SEMANTIC ANALYSIS \n\n");
 	if(sem_errors>0) {
@@ -435,8 +407,6 @@ char *get_type(char *var){
 			return symbol_table[i].data_type;
 		}
 	}
-	char * str = "NoType";
-	return str;
 }
 
 void add(char c) {
@@ -536,10 +506,5 @@ void insert_type() {
 }
 
 void yyerror(const char* msg) {
-	if(!error_already_found){
-		sprintf(syntax_errors[synerrs], "%s in line %d \n", msg, countn+1);
-		synerrs++;
-	}else{
-		error_already_found = 0;
-	}
-} 
+    fprintf(stderr, "%s\n", msg);
+}
